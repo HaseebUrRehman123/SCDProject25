@@ -1,13 +1,36 @@
-const vaultEvents = require('./index');
+const fs = require('fs');
+const path = require('path');
 
-vaultEvents.on('recordAdded', record => {
-  console.log(`[EVENT] Record added: ID ${record.id}, Name: ${record.name}`);
-});
+const logDir = path.join(__dirname, '../logs');
+if (!fs.existsSync(logDir)) fs.mkdirSync(logDir);
 
-vaultEvents.on('recordUpdated', record => {
-  console.log(`[EVENT] Record updated: ID ${record.id}, Name: ${record.name}`);
-});
+const logFile = path.join(logDir, 'nodevault.log');
 
-vaultEvents.on('recordDeleted', record => {
-  console.log(`[EVENT] Record deleted: ID ${record.id}, Name: ${record.name}`);
-});
+// Helper to write log
+function writeLog(message) {
+  const timestamp = new Date().toISOString();
+  fs.appendFileSync(logFile, `[${timestamp}] ${message}\n`);
+}
+
+// --- Logging functions ---
+module.exports = {
+  logAdd: (record) => {
+    writeLog(`✅ Added Record | ID: ${record.id} | Name: ${record.name} | Value: ${record.value}`);
+  },
+
+  logUpdate: (record) => {
+    writeLog(`✏️ Updated Record | ID: ${record.id} | New Name: ${record.name} | New Value: ${record.value}`);
+  },
+
+  logDelete: (record) => {
+    writeLog(`🗑️ Deleted Record | ID: ${record.id}${record.name ? ` | Name: ${record.name}` : ''}`);
+  },
+
+  logBackup: (filePath) => {
+    writeLog(`📦 Backup Created: ${filePath}`);
+  },
+
+  logExport: (filePath) => {
+    writeLog(`📤 Data Exported: ${filePath}`);
+  }
+};

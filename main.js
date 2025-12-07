@@ -1,8 +1,7 @@
 const readline = require('readline');
 const fs = require('fs');
-const path = require('path');
 const db = require('./db');
-require('./events/logger');
+const logger = require('./events/logger');
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -10,21 +9,22 @@ const rl = readline.createInterface({
 });
 
 // --- Backup System ---
-function createBackup() {
+async function createBackup() {
   const backupDir = './backups';
   if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir);
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const filePath = `${backupDir}/backup_${timestamp}.json`;
 
-  const records = db.listRecords();
+  const records = await db.listRecords();
   fs.writeFileSync(filePath, JSON.stringify(records, null, 2));
   console.log(`📦 Backup created: ${filePath}`);
+  logger.logBackup(filePath);
 }
 
 // --- Export System ---
-function exportData() {
-  const records = db.listRecords();
+async function exportData() {
+  const records = await db.listRecords();
   const exportFile = './export.txt';
 
   const header =
@@ -38,21 +38,20 @@ function exportData() {
 
   fs.writeFileSync(exportFile, header + content);
   console.log('✅ Data exported successfully to export.txt');
+  logger.logExport(exportFile);
 }
 
 // --- Statistics ---
-function viewStatistics() {
-  const records = db.listRecords();
+async function viewStatistics() {
+  const records = await db.listRecords();
   if (records.length === 0) {
     console.log("No records available.");
     return menu();
   }
 
   const total = records.length;
-
   const names = records.map(r => r.name);
   const longestName = names.reduce((a, b) => a.length > b.length ? a : b);
-
   const dates = records.map(r => new Date(r.created || Date.now()));
   const earliest = new Date(Math.min(...dates));
   const latest = new Date(Math.max(...dates));
@@ -71,14 +70,14 @@ Latest Record: ${latest.toISOString().split('T')[0]}
 }
 
 // --- Search Records ---
-function searchRecords() {
-  rl.question("Enter search keyword: ", keyword => {
-    const records = db.listRecords();
+async function searchRecords() {
+  rl.question("Enter search keyword: ", async keyword => {
+    const records = await db.listRecords();
     const term = keyword.toLowerCase();
 
     const results = records.filter(r =>
       r.name.toLowerCase().includes(term) ||
-      r.id.toString() === term
+      r.id === term
     );
 
     if (results.length === 0) {
@@ -94,10 +93,10 @@ function searchRecords() {
 }
 
 // --- Sort Records ---
-function sortRecords() {
+async function sortRecords() {
   rl.question("Sort by (1=Name, 2=Date): ", field => {
-    rl.question("Order (1=Ascending, 2=Descending): ", order => {
-      const records = [...db.listRecords()];
+    rl.question("Order (1=Ascending, 2=Descending): ", async order => {
+      const records = [...await db.listRecords()];
 
       if (field === '1') {
         records.sort((a, b) => a.name.localeCompare(b.name));
@@ -118,7 +117,7 @@ function sortRecords() {
 }
 
 // --- MENU ---
-function menu() {
+async function menu() {
   console.log(`
 ===== NodeVault =====
 1. Add Record
@@ -133,22 +132,23 @@ function menu() {
 =====================
   `);
 
-  rl.question('Choose option: ', ans => {
+  rl.question('Choose option: ', async ans => {
     switch (ans.trim()) {
 
       case '1':
         rl.question('Enter name: ', name => {
-          rl.question('Enter value: ', value => {
-            db.addRecord({ name, value });
+          rl.question('Enter value: ', async value => {
+            const id = await db.addRecord({ name, value });
             console.log('✅ Record added successfully!');
-            createBackup();
+            logger.logAdd({ id, name, value });
+            await createBackup();
             menu();
           });
         });
         break;
 
       case '2':
-        const records = db.listRecords();
+        const records = await db.listRecords();
         if (records.length === 0) console.log('No records found.');
         else records.forEach(r =>
           console.log(`ID: ${r.id} | Name: ${r.name} | Value: ${r.value}`)
@@ -159,9 +159,12 @@ function menu() {
       case '3':
         rl.question('Enter record ID to update: ', id => {
           rl.question('New name: ', name => {
-            rl.question('New value: ', value => {
-              const updated = db.updateRecord(Number(id), name, value);
-              console.log(updated ? '✅ Record updated!' : '❌ Record not found.');
+            rl.question('New value: ', async value => {
+              const updated = await db.updateRecord(id, name, value);
+              if (updated) {
+                console.log('✅ Record updated!');
+                logger.logUpdate({ id, name, value });
+              } else console.log('❌ Record not found.');
               menu();
             });
           });
@@ -169,10 +172,13 @@ function menu() {
         break;
 
       case '4':
-        rl.question('Enter record ID to delete: ', id => {
-          const deleted = db.deleteRecord(Number(id));
-          console.log(deleted ? '✅ Record deleted!' : '❌ Record not found.');
-          createBackup();
+        rl.question('Enter record ID to delete: ', async id => {
+          const deleted = await db.deleteRecord(id);
+          if (deleted) {
+            console.log('✅ Record deleted!');
+            logger.logDelete({ id });
+            await createBackup();
+          } else console.log('❌ Record not found.');
           menu();
         });
         break;
@@ -183,20 +189,20 @@ function menu() {
         break;
 
       case '6':
-        searchRecords();
+        await searchRecords();
         break;
 
       case '7':
-        sortRecords();
+        await sortRecords();
         break;
 
       case '8':
-        exportData();
+        await exportData();
         menu();
         break;
 
       case '9':
-        viewStatistics();
+        await viewStatistics();
         break;
 
       default:
@@ -206,4 +212,14 @@ function menu() {
   });
 }
 
-menu();
+// --- Initialize DB and Start Menu ---
+(async () => {
+  try {
+    await db.connect();
+    console.log('✅ Connected to MongoDB!');
+    menu();
+  } catch (err) {
+    console.error('❌ Failed to connect to MongoDB:', err);
+    process.exit(1);
+  }
+})();
