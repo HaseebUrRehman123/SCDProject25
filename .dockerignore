@@ -1,0 +1,7 @@
+node_modules
+backups
+logs
+export.txt
+data
+mongo-data
+.env
