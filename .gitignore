@@ -4,3 +4,4 @@ backups/
 mongo-data/
 export.txt
 data/vault.json
+.env
