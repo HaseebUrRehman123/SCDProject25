@@ -1,17 +1,26 @@
+// db.js
 const { MongoClient, ObjectId } = require('mongodb');
 
-const url = 'mongodb://localhost:27017';
-const dbName = 'nodevault';
-const collectionName = 'records';
+const url = process.env.MONGO_URI;  // MongoDB URI from .env
+const collectionName = process.env.COLLECTION_NAME || 'records';
 
 let db, collection;
 
 // --- Connect to MongoDB ---
 async function connect() {
-  const client = new MongoClient(url);
-  await client.connect();
-  db = client.db(dbName);
-  collection = db.collection(collectionName);
+  try {
+    const client = new MongoClient(url, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    await client.connect();
+    db = client.db(); // db name comes from MONGO_URI
+    collection = db.collection(collectionName);
+    console.log('✅ Connected to MongoDB!');
+  } catch (err) {
+    console.error('❌ Failed to connect to MongoDB:', err);
+    process.exit(1); // Exit if DB connection fails
+  }
 }
 
 // --- List all records ---
