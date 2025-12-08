@@ -4,31 +4,25 @@ services:
   mongodb:
     image: mongo:6
     container_name: mongo-compose
-    restart: always
+    restart: unless-stopped
+    ports:
+      - "27017:27017"          # maps container port 27017 to host
+    volumes:
+      - mongo-data:/data/db    # persistent data
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin123
-    volumes:
-      - mongo-data:/data/db
-    networks:
-      - nodevault-network
 
   backend:
-    image: nodevault-backend:1.0
-    container_name: backend-compose
-    restart: always
-    env_file:
-      - .env
+    build: .
+    container_name: nodevault-backend
+    restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3000:3000"           # maps container port 3000 to host
+    environment:
+      - MONGO_URI=mongodb://admin:admin123@mongodb:27017/nodevault?authSource=admin
     depends_on:
       - mongodb
-    networks:
-      - nodevault-network
 
 volumes:
   mongo-data:
-
-networks:
-  nodevault-network:
-    driver: bridge
